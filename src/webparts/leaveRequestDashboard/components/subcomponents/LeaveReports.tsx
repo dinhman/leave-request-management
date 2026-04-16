@@ -9,7 +9,8 @@ import {
   SelectionMode,
   IColumn,
   getTheme,
-  mergeStyles
+  mergeStyles,
+  DefaultButton
 } from '@fluentui/react';
 import { ILeaveRequest } from '../../../../models/ILeaveRequest';
 
@@ -43,6 +44,8 @@ export const LeaveReports: React.FC<ILeaveReportsProps> = (props) => {
   
   const [selectedMonth, setSelectedMonth] = React.useState<number>(currentMonth);
   const [selectedYear, setSelectedYear] = React.useState<number>(currentYear);
+  const [currentPage, setCurrentPage] = React.useState<number>(1);
+  const pageSize = 10;
 
   const monthOptions: IDropdownOption[] = [
     { key: 0, text: 'January' }, { key: 1, text: 'February' }, { key: 2, text: 'March' },
@@ -147,14 +150,20 @@ export const LeaveReports: React.FC<ILeaveReportsProps> = (props) => {
           label="Select Year"
           options={yearOptions}
           selectedKey={selectedYear}
-          onChange={(_, opt) => setSelectedYear(opt?.key as number)}
+          onChange={(_, opt) => {
+            setSelectedYear(opt?.key as number);
+            setCurrentPage(1);
+          }}
           styles={{ root: { width: 150 } }}
         />
         <Dropdown
           label="Select Month"
           options={monthOptions}
           selectedKey={selectedMonth}
-          onChange={(_, opt) => setSelectedMonth(opt?.key as number)}
+          onChange={(_, opt) => {
+            setSelectedMonth(opt?.key as number);
+            setCurrentPage(1);
+          }}
           styles={{ root: { width: 180 } }}
         />
       </Stack>
@@ -164,7 +173,7 @@ export const LeaveReports: React.FC<ILeaveReportsProps> = (props) => {
           Monthly Leave Consumption Summary
         </Text>
         <DetailsList
-          items={aggregatedData}
+          items={aggregatedData.slice((currentPage - 1) * pageSize, currentPage * pageSize)}
           columns={columns}
           selectionMode={SelectionMode.none}
           layoutMode={DetailsListLayoutMode.justified}
@@ -177,6 +186,33 @@ export const LeaveReports: React.FC<ILeaveReportsProps> = (props) => {
             }
           }}
         />
+
+        {/* Pagination Controls */}
+        {aggregatedData.length > pageSize && (
+          <Stack 
+            horizontal 
+            horizontalAlign="center" 
+            verticalAlign="center" 
+            tokens={{ childrenGap: 20 }}
+            style={{ marginTop: '20px', padding: '10px' }}
+          >
+            <DefaultButton
+              text="Previous"
+              iconProps={{ iconName: 'ChevronLeft' }}
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+            />
+            <Text variant="medium" style={{ fontWeight: 600 }}>
+              Page {currentPage} of {Math.ceil(aggregatedData.length / pageSize)}
+            </Text>
+            <DefaultButton
+              text="Next"
+              iconProps={{ iconName: 'ChevronRight' }}
+              onClick={() => setCurrentPage(prev => Math.min(Math.ceil(aggregatedData.length / pageSize), prev + 1))}
+              disabled={currentPage === Math.ceil(aggregatedData.length / pageSize)}
+            />
+          </Stack>
+        )}
         {aggregatedData.length === 0 && (
           <Stack horizontalAlign="center" style={{ padding: '40px 0' }}>
             <Text style={{ color: theme.palette.neutralSecondary }}>No approved leave requests found for this period.</Text>

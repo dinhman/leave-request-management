@@ -17,10 +17,19 @@ import {
   Icon,
   Dialog,
   DialogType,
-  DialogFooter
+  DialogFooter,
+  Spinner,
+  SpinnerSize
 } from '@fluentui/react';
 import { HttpClient, IHttpClientOptions, HttpClientResponse } from '@microsoft/sp-http';
 import { Region } from '../../../../models/ILeaveRequest';
+import { ILeaveBalance } from '../../../../models/ILeaveBalance';
+import { SPService, ISPService } from '../../../../services/SPService';
+
+interface ILeaveDate {
+  date: Date;
+  duration: 'Full' | 'Morning' | 'Afternoon';
+}
 
 export interface ILeaveRequestFormProps {
   userDisplayName: string;
@@ -54,27 +63,31 @@ export const LeaveRequestForm: React.FC<ILeaveRequestFormProps> = (props) => {
   const { userDisplayName, userEmail, automateUrl, httpClient, region } = props;
   const isVN = region === 'VN';
 
-  const [selectedDates, setSelectedDates] = React.useState<Date[]>([]);
+  const [selectedDates, setSelectedDates] = React.useState<ILeaveDate[]>([]);
   const [currentPickedDate, setCurrentPickedDate] = React.useState<Date | undefined>(undefined);
   const [leaveType, setLeaveType] = React.useState<string>("Annual Leave");
   const [numberOfDays, setNumberOfDays] = React.useState<number>(1);
   const [reason, setReason] = React.useState<string>("");
   // Optimizing memory: keep standard File objects in state instead of heavy Base64 strings.
   const [attachments, setAttachments] = React.useState<File[]>([]);
+  const [balance, setBalance] = React.useState<ILeaveBalance | undefined>(undefined);
+  const [loadingBalance, setLoadingBalance] = React.useState<boolean>(false);
   const [submitting, setSubmitting] = React.useState<boolean>(false);
   const [status, setStatus] = React.useState<{ type: MessageBarType, message: string } | undefined>(undefined);
   const [isSuccessDialogOpen, setIsSuccessDialogOpen] = React.useState<boolean>(false);
+  const [isAttachmentWarningOpen, setIsAttachmentWarningOpen] = React.useState<boolean>(false);
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const addDate = () => {
     if (!currentPickedDate) return;
     const dateStr = formatDateToString(currentPickedDate);
-    const isDuplicate = selectedDates.some(d => formatDateToString(d) === dateStr);
+    const isDuplicate = selectedDates.some(d => formatDateToString(d.date) === dateStr);
     if (!isDuplicate) {
-      const newDates = [...selectedDates, currentPickedDate].sort((a, b) => a.getTime() - b.getTime());
+      const newDate: ILeaveDate = { date: currentPickedDate, duration: 'Full' };
+      const newDates: ILeaveDate[] = [...selectedDates, newDate]
+        .sort((a, b) => a.date.getTime() - b.date.getTime());
       setSelectedDates(newDates);
-      setNumberOfDays(newDates.length);
     }
   };
 
@@ -82,22 +95,43 @@ export const LeaveRequestForm: React.FC<ILeaveRequestFormProps> = (props) => {
     const newDates = [...selectedDates];
     newDates.splice(index, 1);
     setSelectedDates(newDates);
-    setNumberOfDays(newDates.length);
   };
 
-  const leaveTypeOptionsVN: IDropdownOption[] = [
-    { key: 'Annual Leave', text: 'Nghỉ phép năm' },
-    { key: 'Medical Leave', text: 'Nghỉ bệnh' },
-    { key: 'Hospitalisation Leave', text: 'Nghỉ nằm viện' },
-    { key: 'Childcare Leave', text: 'Nghỉ con ốm' },
-    { key: 'Unpaid Leave', text: 'Nghỉ không lương' },
-    { key: 'Maternity Leave', text: 'Nghỉ thai sản' },
-    { key: 'Paternity Leave', text: 'Nghỉ khi vợ sinh con' },
-    { key: 'Work from home', text: 'Làm việc tại nhà' }
-  ];
+  const updateDateDuration = (index: number, duration: 'Full' | 'Morning' | 'Afternoon'): void => {
+    const newDates = [...selectedDates];
+    newDates[index].duration = duration;
+    setSelectedDates(newDates);
+  };
+
+  React.useEffect(() => {
+    const total = selectedDates.reduce((acc, curr) => acc + (curr.duration === 'Full' ? 1 : 0.5), 0);
+    setNumberOfDays(total);
+  }, [selectedDates]);
+
+  const spService: ISPService = new SPService();
+
+  const fetchBalance = async (): Promise<void> => {
+    try {
+      setLoadingBalance(true);
+      const userBalance = await spService.getUserBalance(userEmail, region);
+      setBalance(userBalance);
+    } catch (error) {
+      console.error("Error fetching balance:", error);
+    } finally {
+      setLoadingBalance(false);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchBalance().catch(() => {});
+  }, [userEmail, region]);
+
+  const isAnnualLeave = leaveType === 'Annual Leave';
+  const remainingDays = balance ? balance.AnnualLeaveRemaining : 0;
+  const isOverBalance = isAnnualLeave && numberOfDays > remainingDays;
 
   const leaveTypeOptionsIntl: IDropdownOption[] = [
-    { key: 'Annual Leave', text: 'Annual Leave' },
+    { key: 'Annual Leave', text: 'Annual Leave', disabled: balance !== undefined && balance.AnnualLeaveRemaining <= 0 },
     { key: 'Medical Leave', text: 'Medical Leave' },
     { key: 'Hospitalisation Leave', text: 'Hospitalisation Leave' },
     { key: 'Childcare Leave', text: 'Childcare Leave' },
@@ -105,6 +139,19 @@ export const LeaveRequestForm: React.FC<ILeaveRequestFormProps> = (props) => {
     { key: 'Maternity Leave', text: 'Maternity Leave' },
     { key: 'Paternity Leave', text: 'Paternity Leave' },
     { key: 'Work from home', text: 'Work from home' }
+  ];
+
+  const leaveTypeOptionsVN: IDropdownOption[] = [
+    { key: 'Business trip', text: 'Đi công tác/ Business trip' },
+    { key: 'Unpaid Leave', text: 'Nghỉ không lương/ Unpaid Leave' },
+    { key: 'Annual Leave', text: 'Nghỉ phép năm/ Annual Leave', disabled: balance !== undefined && balance.AnnualLeaveRemaining <= 0 },
+    { key: 'Sick Leave', text: 'Nghỉ ốm, nghỉ con ốm/ Sick Leave, Sick Child Leave' },
+    { key: 'Paternity Leave', text: 'Nghỉ vợ sinh/ Paternity Leave' },
+    { key: 'Maternity Leave', text: 'Nghỉ thai sản/ Maternity Leave' },
+    { key: 'Medical checkup', text: 'Nghỉ phép đi khám bệnh / Medical checkup' },
+    { key: 'Marriage Leave', text: 'Nghỉ kết hôn / Marriage Leave' },
+    { key: 'Child Marriage Leave', text: 'Nghỉ con kết hôn / Child\'s Marriage Leave' },
+    { key: 'Funeral Leave', text: 'Nghỉ tang chế (Cha mẹ, Con, Vợ hoặc Chồng)/ Funeral Leave (Parents; Spouse\'s Parents; Child; Spouse)' }
   ];
 
   const leaveTypeOptions = isVN ? leaveTypeOptionsVN : leaveTypeOptionsIntl;
@@ -141,17 +188,9 @@ export const LeaveRequestForm: React.FC<ILeaveRequestFormProps> = (props) => {
     setAttachments(newAttachments);
   };
 
-  const handleSubmit = async (): Promise<void> => {
-    if (selectedDates.length === 0 || !reason || !leaveType || numberOfDays <= 0) {
-      setStatus({ type: MessageBarType.error, message: isVN ? "Vui lòng điền đầy đủ thông tin bắt buộc." : "Please fill in all required fields." });
-      return;
-    }
+  const typesRequiringAttachments = ['Paternity Leave', 'Sick Leave', 'Marriage Leave', 'Funeral Leave'];
 
-    if (!automateUrl) {
-      setStatus({ type: MessageBarType.warning, message: isVN ? "Chưa cấu hình URL phê duyệt." : "Automate URL is not configured." });
-      return;
-    }
-
+  const performSubmit = async (uploadLater: boolean = false): Promise<void> => {
     try {
       setSubmitting(true);
       setStatus(undefined);
@@ -170,7 +209,19 @@ export const LeaveRequestForm: React.FC<ILeaveRequestFormProps> = (props) => {
          }
       }
 
-      const selectedDatesStr = selectedDates.map(d => formatDateToString(d)).join(", ");
+      const durationLabels: { [key: string]: string } = {
+        'Full': isVN ? 'Cả ngày' : 'Full Day',
+        'Morning': isVN ? 'Sáng' : 'Morning',
+        'Afternoon': isVN ? 'Chiều' : 'Afternoon'
+      };
+
+      const selectedDatesStr = selectedDates.map(d => 
+        `${d.date.getDate().toString().padStart(2, '0')}/${(d.date.getMonth() + 1).toString().padStart(2, '0')} (${durationLabels[d.duration]})`
+      ).join(', ');
+
+      const finalReason = uploadLater 
+        ? `${reason}\n\n(Chưa có chứng từ đính kèm - Sẽ bổ sung sau / No attachments provided - Will provide later)` 
+        : reason;
 
       const payload = {
         requester: userDisplayName,
@@ -179,11 +230,13 @@ export const LeaveRequestForm: React.FC<ILeaveRequestFormProps> = (props) => {
         leaveType: leaveType,
         numberOfDays: numberOfDays,
         attachments: validAttachments,
-        startDate: formatDateToString(selectedDates[0]),
-        endDate: formatDateToString(selectedDates[selectedDates.length - 1]),
+        startDate: formatDateToString(selectedDates[0].date),
+        endDate: formatDateToString(selectedDates[selectedDates.length - 1].date),
         selectedDates: selectedDatesStr,
-        reason: reason,
-        submittedAt: new Date().toISOString()
+        reason: finalReason,
+        submittedAt: new Date().toISOString(),
+        annualLeaveRemaining: remainingDays,
+        isAnnualLeave: isAnnualLeave
       };
 
       const requestOptions: IHttpClientOptions = {
@@ -215,6 +268,31 @@ export const LeaveRequestForm: React.FC<ILeaveRequestFormProps> = (props) => {
     }
   };
 
+  const handleSubmit = async (): Promise<void> => {
+    if (selectedDates.length === 0 || !reason || !leaveType || numberOfDays <= 0) {
+      setStatus({ type: MessageBarType.error, message: isVN ? "Vui lòng điền đầy đủ thông tin bắt buộc." : "Please fill in all required fields." });
+      return;
+    }
+
+    if (isOverBalance) {
+      setStatus({ type: MessageBarType.error, message: isVN ? `Số ngày nghỉ phép năm vượt quá số dư hiện có (${remainingDays} ngày).` : `Requested days exceed your annual leave balance (${remainingDays} days).` });
+      return;
+    }
+
+    if (!automateUrl) {
+      setStatus({ type: MessageBarType.warning, message: isVN ? "Chưa cấu hình URL phê duyệt." : "Automate URL is not configured." });
+      return;
+    }
+
+    // Check for required attachments
+    if (typesRequiringAttachments.indexOf(leaveType) !== -1 && attachments.length === 0) {
+      setIsAttachmentWarningOpen(true);
+      return;
+    }
+
+    await performSubmit();
+  };
+
   return (
     <div className={formContainerClass}>
       <Stack tokens={{ childrenGap: 25 }}>
@@ -225,6 +303,32 @@ export const LeaveRequestForm: React.FC<ILeaveRequestFormProps> = (props) => {
           <Text variant="small" style={{ color: theme.palette.neutralSecondary }}>
             {isVN ? 'Hãy điền chi tiết bên dưới để thông báo cho Quản lý.' : 'Fill in the details below to notify your manager and HR.'}
           </Text>
+        </Stack>
+
+        {/* Display Balance Card */}
+        <Stack 
+          style={{ 
+            padding: '12px 18px', 
+            backgroundColor: isOverBalance ? '#fde7e9' : '#edf2f7', 
+            borderRadius: '8px',
+            borderLeft: `4px solid ${isOverBalance ? theme.palette.red : theme.palette.themePrimary}`
+          }}
+          tokens={{ childrenGap: 5 }}
+        >
+          <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
+            <Text variant="small" style={{ fontWeight: 600, color: theme.palette.neutralSecondary }}>
+              {isVN ? 'SỐ DƯ PHÉP NĂM' : 'ANNUAL LEAVE BALANCE'}
+            </Text>
+            {loadingBalance && <Spinner size={SpinnerSize.xSmall} />}
+          </Stack>
+          <Text variant="large" style={{ fontWeight: 700, color: isOverBalance ? theme.palette.red : theme.palette.neutralPrimary }}>
+            {balance ? `${balance.AnnualLeaveRemaining} ${isVN ? 'ngày' : 'days'}` : (loadingBalance ? '...' : (isVN ? 'Chưa khởi tạo' : 'Not initialized'))}
+          </Text>
+          {isOverBalance && (
+            <Text variant="small" style={{ color: theme.palette.red, fontWeight: 600 }}>
+              {isVN ? 'Cảnh báo: Vượt quá số dư!' : 'Warning: Exceeds balance!'}
+            </Text>
+          )}
         </Stack>
 
         {status && (
@@ -264,10 +368,8 @@ export const LeaveRequestForm: React.FC<ILeaveRequestFormProps> = (props) => {
               label={isVN ? 'Số ngày' : 'Number of Days'}
               type="number"
               required={true}
+              readOnly={true}
               value={numberOfDays.toString()}
-              onChange={(_, val) => setNumberOfDays(val ? parseFloat(val) : 0)}
-              min={0.5}
-              step={0.5}
               styles={{ root: { flex: 1 } }}
             />
           </Stack>
@@ -292,25 +394,56 @@ export const LeaveRequestForm: React.FC<ILeaveRequestFormProps> = (props) => {
 
             {selectedDates.length > 0 && (
               <Stack horizontal wrap tokens={{ childrenGap: 8 }} style={{ marginTop: '10px' }}>
-                {selectedDates.map((date, idx) => (
-                  <div key={idx} style={{ 
-                    padding: '6px 12px', 
-                    backgroundColor: theme.palette.themeLighter, 
-                    border: `1px solid ${theme.palette.themeLight}`,
-                    borderRadius: '16px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}>
-                    <Text variant="smallPlus" style={{ fontWeight: 600, color: theme.palette.themePrimary }}>
-                      {date.getDate().toString().padStart(2, '0')}/{((date.getMonth() + 1)).toString().padStart(2, '0')}/{date.getFullYear()}
+                {selectedDates.map((item, idx) => (
+                  <Stack 
+                    key={idx} 
+                    horizontal 
+                    verticalAlign="center" 
+                    tokens={{ childrenGap: 10 }}
+                    style={{ 
+                      padding: '8px 15px', 
+                      backgroundColor: theme.palette.white, 
+                      border: `1px solid ${theme.palette.neutralLight}`,
+                      borderRadius: '8px',
+                      width: '100%',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+                    }}
+                  >
+                    <Text variant="medium" style={{ fontWeight: 600, width: '100px' }}>
+                      {item.date.getDate().toString().padStart(2, '0')}/{((item.date.getMonth() + 1)).toString().padStart(2, '0')}
                     </Text>
-                    <Icon 
-                      iconName="Cancel" 
-                      style={{ fontSize: '12px', cursor: 'pointer', color: theme.palette.neutralSecondary }} 
+                    
+                    <Stack horizontal tokens={{ childrenGap: 5 }} style={{ flex: 1 }}>
+                      {[
+                        { key: 'Full', text: isVN ? 'Cả ngày' : 'Full' },
+                        { key: 'Morning', text: isVN ? 'Sáng' : 'AM' },
+                        { key: 'Afternoon', text: isVN ? 'Chiều' : 'PM' }
+                      ].map(dur => (
+                        <DefaultButton
+                          key={dur.key}
+                          text={dur.text}
+                          onClick={() => updateDateDuration(idx, dur.key as 'Full' | 'Morning' | 'Afternoon')}
+                          styles={{ 
+                            root: { 
+                              height: '28px', 
+                              padding: '0 8px', 
+                              fontSize: '11px',
+                              borderRadius: '4px',
+                              border: item.duration === dur.key ? `1px solid ${theme.palette.themePrimary}` : `1px solid ${theme.palette.neutralLighter}`,
+                              backgroundColor: item.duration === dur.key ? theme.palette.themeLighter : theme.palette.white,
+                              color: item.duration === dur.key ? theme.palette.themePrimary : theme.palette.neutralPrimary
+                            } 
+                          }}
+                        />
+                      ))}
+                    </Stack>
+
+                    <IconButton 
+                      iconProps={{ iconName: "Cancel" }} 
+                      styles={{ root: { color: theme.palette.neutralSecondary, height: '28px' } }} 
                       onClick={() => removeSelectedDate(idx)}
                     />
-                  </div>
+                  </Stack>
                 ))}
               </Stack>
             )}
@@ -395,6 +528,34 @@ export const LeaveRequestForm: React.FC<ILeaveRequestFormProps> = (props) => {
             }} 
             text={isVN ? 'Đồng ý' : 'OK'} 
             styles={{ root: { borderRadius: '6px' } }}
+          />
+        </DialogFooter>
+      </Dialog>
+
+      <Dialog
+        hidden={!isAttachmentWarningOpen}
+        onDismiss={() => setIsAttachmentWarningOpen(false)}
+        dialogContentProps={{
+          type: DialogType.normal,
+          title: isVN ? 'Thiếu chứng từ đính kèm' : 'Missing Attachments',
+          subText: isVN 
+            ? 'Loại nghỉ này yêu cầu phải có chứng từ đính kèm. Bạn muốn quay lại để tải lên hay sẽ bổ sung sau?' 
+            : 'This leave type requires supporting documents. Would you like to go back and upload them or provide them later?'
+        }}
+        modalProps={{ isBlocking: true, styles: { main: { maxWidth: 450 } } }}
+      >
+        <DialogFooter>
+          <PrimaryButton 
+            onClick={() => setIsAttachmentWarningOpen(false)} 
+            text={isVN ? 'Quay lại upload' : 'Back to upload'} 
+          />
+          <DefaultButton 
+            onClick={() => {
+              setIsAttachmentWarningOpen(false);
+              performSubmit(true).catch(() => {});
+            }} 
+            text={isVN ? 'Bổ sung sau' : 'Upload later'} 
+            styles={{ root: { color: theme.palette.orange } }}
           />
         </DialogFooter>
       </Dialog>

@@ -24,6 +24,7 @@ import { LeaveRequestDetail } from './subcomponents/LeaveRequestDetail';
 import { RegionSelector } from './subcomponents/RegionSelector';
 import { LeaveReports } from './subcomponents/LeaveReports';
 import { LeaveRequestForm } from './subcomponents/LeaveRequestForm';
+import { BalanceManagement } from './subcomponents/BalanceManagement';
 import { ILeaveRequest, Region } from '../../../models/ILeaveRequest';
 import { ISPService, SPService } from '../../../services/SPService';
 import { getSP } from '../../../pnpjsConfig';
@@ -436,6 +437,14 @@ const LeaveRequestDashboardFunctional: React.FC<ILeaveRequestDashboardProps> = (
           <PivotItem headerText="Reports" itemIcon="BIDashboard">
             <div style={{ marginTop: '25px', paddingBottom: '30px' }}>
               <LeaveReports items={items} />
+            </div>
+          </PivotItem>
+        )}
+
+        {hasAccessToAdminDashboard && (
+          <PivotItem headerText="Manage Balances" itemIcon="ContactCard">
+            <div style={{ marginTop: '25px', paddingBottom: '30px' }}>
+              <BalanceManagement region={selectedRegion} />
             </div>
           </PivotItem>
         )}
