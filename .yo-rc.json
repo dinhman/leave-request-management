@@ -1,0 +1,24 @@
+{
+  "@microsoft/generator-sharepoint": {
+    "whichFolder": "subdir",
+    "solutionName": "longan-leave-management",
+    "componentType": "webpart",
+    "template": "react",
+    "componentName": "LeaveRequestDashboard",
+    "plusBeta": false,
+    "isCreatingSolution": true,
+    "nodeVersion": "18.20.8",
+    "sdksVersions": {
+      "@microsoft/microsoft-graph-client": "3.0.2",
+      "@microsoft/teams-js": "2.24.0"
+    },
+    "version": "1.20.0",
+    "libraryName": "longan-leave-management",
+    "libraryId": "d066914e-04fd-4017-91cb-978c718cf872",
+    "environment": "spo",
+    "packageManager": "npm",
+    "solutionShortDescription": "Longan Leave Management System",
+    "skipFeatureDeployment": true,
+    "isDomainIsolated": false
+  }
+}

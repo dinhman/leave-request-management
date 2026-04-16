@@ -1,0 +1,40 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx-build/package-solution.schema.json",
+  "solution": {
+    "name": "longan-leave-management-client-side-solution",
+    "id": "d066914e-04fd-4017-91cb-978c718cf872",
+    "version": "1.0.3.0",
+    "includeClientSideAssets": true,
+    "skipFeatureDeployment": true,
+    "isDomainIsolated": false,
+    "developer": {
+      "name": "",
+      "websiteUrl": "",
+      "privacyUrl": "",
+      "termsOfUseUrl": "",
+      "mpnId": "Undefined-1.20.0"
+    },
+    "metadata": {
+      "shortDescription": {
+        "default": "Longan Group Leave Management Application"
+      },
+      "longDescription": {
+        "default": "Enterprise application for Longan Group to manage employee leave requests, including cross-regional workflow routing and dynamic admin dashboard views."
+      },
+      "screenshotPaths": [],
+      "videoUrl": "",
+      "categories": []
+    },
+    "features": [
+      {
+        "title": "Longan Leave Management Feature",
+        "description": "The feature that activates elements of the Longan Leave Management solution.",
+        "id": "e09a38f4-d818-4127-928a-3f2d317b8cdd",
+        "version": "1.0.3.0"
+      }
+    ]
+  },
+  "paths": {
+    "zippedPackage": "solution/longan-leave-management.sppkg"
+  }
+}
